@@ -1,0 +1,93 @@
+name: AirSense CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Backend (Node.js) ──────────────────────────────────────────────────────
+  backend:
+    name: Backend — Node.js checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check (all JS files)
+        run: find src -name "*.js" | xargs -I{} node --check {}
+
+      - name: Check required env vars are documented
+        run: |
+          echo "Checking .env.example exists..."
+          test -f .env.example && echo "OK: .env.example found" || (echo "MISSING: .env.example" && exit 1)
+
+  # ─── ML Service (Python) ────────────────────────────────────────────────────
+  ml-service:
+    name: ML Service — Python checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ml-service/requirements.txt
+
+      - name: Install dependencies
+        run: pip install --prefer-binary -r requirements.txt
+
+      - name: Syntax check (compile all Python files)
+        run: find . -name "*.py" -not -path "./.git/*" | xargs python -m py_compile && echo "All Python files OK"
+
+      - name: Check mock data exists
+        run: |
+          test -f data/mock_outputs.json && echo "OK: mock_outputs.json found" || (echo "MISSING: mock_outputs.json — this will break early dev!" && exit 1)
+          test -f data/zones_metadata.csv && echo "OK: zones_metadata.csv found" || (echo "MISSING: zones_metadata.csv" && exit 1)
+
+  # ─── Frontend (React + Vite) ────────────────────────────────────────────────
+  frontend:
+    name: Frontend — Build check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (catches import errors, missing files, type issues)
+        run: npm run build
+
+      - name: Check build output exists
+        run: test -d dist && echo "OK: dist/ created" || (echo "Build produced no output" && exit 1)
