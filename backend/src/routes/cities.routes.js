@@ -11,7 +11,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Load cities mock data
-const MOCK_DATA_PATH = path.join(__dirname, '../../../../ml-service/data/mock_outputs.json');
+const MOCK_DATA_PATH = path.join(__dirname, '../../../ml-service/data/mock_outputs.json');
 let citiesData = null;
 try {
   const raw = JSON.parse(fs.readFileSync(MOCK_DATA_PATH, 'utf-8'));

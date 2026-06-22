@@ -28,9 +28,9 @@ mock_data: dict = {}
 try:
     with open(MOCK_DATA_PATH, "r", encoding="utf-8") as f:
         mock_data = json.load(f)
-    print(f"✅ Mock data loaded from {MOCK_DATA_PATH}")
+    print(f"[OK] Mock data loaded from {MOCK_DATA_PATH}")
 except FileNotFoundError:
-    print(f"⚠️  Mock data not found at {MOCK_DATA_PATH}")
+    print(f"[WARN] Mock data not found at {MOCK_DATA_PATH}")
 
 USE_MOCK = os.getenv("USE_MOCK_DATA", "true").lower() == "true"
 
