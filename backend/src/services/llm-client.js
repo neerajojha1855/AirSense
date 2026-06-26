@@ -6,13 +6,25 @@
  */
 
 const OpenAI = require('openai');
+const { GoogleGenAI } = require('@google/genai');
 
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 const LLM_API_KEY = process.env.LLM_API_KEY;
 
 let openaiClient = null;
-if (LLM_PROVIDER === 'openai' && LLM_API_KEY) {
-  openaiClient = new OpenAI({ apiKey: LLM_API_KEY });
+let geminiClient = null;
+let defaultModel = 'gpt-4o-mini';
+
+if (LLM_API_KEY) {
+  if (LLM_PROVIDER === 'groq') {
+    openaiClient = new OpenAI({ apiKey: LLM_API_KEY, baseURL: 'https://api.groq.com/openai/v1' });
+    defaultModel = 'llama3-8b-8192';
+  } else if (LLM_PROVIDER === 'gemini') {
+    geminiClient = new GoogleGenAI({ apiKey: LLM_API_KEY });
+    defaultModel = 'gemini-2.5-flash';
+  } else {
+    openaiClient = new OpenAI({ apiKey: LLM_API_KEY });
+  }
 }
 
 // AQI category helper
@@ -56,7 +68,7 @@ async function generateAdvisory({ location, aqi, query, language = 'en', nearVul
     ? 'This area is near a hospital or school — extra caution is advised for children, elderly, and patients.'
     : '';
 
-  if (!openaiClient) {
+  if (!openaiClient && !geminiClient) {
     console.warn('[LLM] No LLM client configured — returning fallback advisory');
     const fallbackFn = FALLBACK_ADVISORY[language] || FALLBACK_ADVISORY.en;
     return { reply: fallbackFn(location, aqi), riskLevel };
@@ -69,16 +81,70 @@ async function generateAdvisory({ location, aqi, query, language = 'en', nearVul
   const userPrompt = `Location: ${location}. Current AQI: ${aqi} (${aqiCategory}). User question: "${query}"`;
 
   try {
-    const completion = await openaiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 300,
-      temperature: 0.7,
-    });
-    const reply = completion.choices[0]?.message?.content || '';
+    let reply = '';
+    
+    if (LLM_PROVIDER === 'gemini' && geminiClient) {
+      // Using the official @google/genai SDK
+      try {
+        const response = await geminiClient.models.generateContent({
+          model: defaultModel,
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+            maxOutputTokens: 300,
+          }
+        });
+        reply = response.text || '';
+      } catch (apiErr) {
+        if (apiErr.status === 503 && defaultModel === 'gemini-2.5-flash') {
+          console.warn('[LLM] 503 Service Unavailable on 2.5-flash. Falling back to 1.5-flash via native SDK...');
+          const fallbackResp = await geminiClient.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: userPrompt,
+            config: {
+              systemInstruction: systemPrompt,
+              temperature: 0.7,
+              maxOutputTokens: 300,
+            }
+          });
+          reply = fallbackResp.text || '';
+        } else {
+          throw apiErr;
+        }
+      }
+    } else if (openaiClient) {
+      // Using OpenAI (or Groq) SDK
+      let completion;
+      try {
+        completion = await openaiClient.chat.completions.create({
+          model: defaultModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 300,
+          temperature: 0.7,
+        });
+      } catch (apiErr) {
+        if (apiErr.status === 503 && defaultModel === 'gemini-2.5-flash') {
+          console.warn('[LLM] 503 Service Unavailable on 2.5-flash. Falling back to 1.5-flash...');
+          completion = await openaiClient.chat.completions.create({
+            model: 'gemini-1.5-flash',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 300,
+            temperature: 0.7,
+          });
+        } else {
+          throw apiErr;
+        }
+      }
+      reply = completion.choices[0]?.message?.content || '';
+    }
+
     return { reply, riskLevel };
   } catch (err) {
     console.error('[LLM] API call failed:', err.message);

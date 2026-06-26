@@ -1,5 +1,6 @@
 # ─── Environment & Secrets ─────────────────────────────────────────────────────
 .env
+*.env
 .env.*
 !.env.example
 *.pem
@@ -48,6 +49,7 @@ ml-service/models/*.onnx
 ml-service/data/*.csv.bak
 ml-service/data/raw/
 ml-service/data/processed/
+generate_chart.py
 
 # Stan/Prophet compiled model cache
 ml-service/data/prophet_cache/
@@ -83,6 +85,7 @@ dump.rdb
 *.rdb
 mongodb_data/
 .mongo/
+
 
 # ─── Docker ────────────────────────────────────────────────────────────────────
 .docker/

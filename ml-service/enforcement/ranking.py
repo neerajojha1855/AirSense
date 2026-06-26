@@ -12,14 +12,36 @@ This reuses attribution engine output — NOT a separate ML model (per AGENTS.md
 
 from datetime import datetime, timezone
 from typing import Any
+import pandas as pd
+from pathlib import Path
+from attribution.scoring_model import get_attribution
+import sys
+import os
 
-# Zone population reference (from zones_metadata.csv)
-ZONE_POPULATION = {
-    "anand-vihar": 48000, "rk-puram": 62000, "ito": 35000,
-    "dwarka": 85000, "rohini": 92000, "punjabi-bagh": 54000,
-    "okhla": 41000, "narela": 28000, "lodhi-road": 22000,
-    "wazirpur": 33000,
-}
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+DATA_PATH = Path(__file__).parent.parent / "data"
+ZONES_CSV = DATA_PATH / "zones_metadata.csv"
+
+try:
+    zones_df = pd.read_csv(ZONES_CSV)
+    ZONE_POPULATION = zones_df.set_index("zoneId")["population_estimate"].to_dict()
+    VALID_ZONES = zones_df["zoneId"].tolist()
+except Exception:
+    ZONE_POPULATION = {
+        "anand-vihar": 48000,
+        "rk-puram": 62000,
+        "ito": 35000,
+        "dwarka": 85000,
+        "rohini": 92000,
+        "punjabi-bagh": 54000,
+        "okhla": 41000,
+        "narela": 28000,
+        "lodhi-road": 22000,
+        "wazirpur": 33000,
+    }
+
+    VALID_ZONES = list(ZONE_POPULATION.keys())
 
 # Weighting for the composite score
 WEIGHTS = {
@@ -28,7 +50,7 @@ WEIGHTS = {
     "attribution": 0.30, # Higher attribution confidence → more certain enforcement target
 }
 
-MAX_POPULATION = max(ZONE_POPULATION.values())  # for normalization
+MAX_POPULATION = max(ZONE_POPULATION.values()) if ZONE_POPULATION else 100000 # for normalization
 
 
 def aqi_to_category(aqi: int) -> str:
@@ -68,51 +90,47 @@ def get_enforcement_priorities(limit: int = 10) -> dict[str, Any]:
         dict matching API contract enforcement shape
     """
     now = datetime.now(timezone.utc)
-
-    # Stub zone data — replace with real DB reads in Week 2
-    zone_stubs = [
-        {"zoneId": "okhla", "aqi": 378, "dominantSource": "industrial", "confidence": 0.62},
-        {"zoneId": "anand-vihar", "aqi": 320, "dominantSource": "traffic", "confidence": 0.58},
-        {"zoneId": "narela", "aqi": 295, "dominantSource": "industrial", "confidence": 0.51},
-        {"zoneId": "wazirpur", "aqi": 268, "dominantSource": "industrial", "confidence": 0.49},
-        {"zoneId": "rohini", "aqi": 245, "dominantSource": "traffic", "confidence": 0.52},
-        {"zoneId": "punjabi-bagh", "aqi": 232, "dominantSource": "traffic", "confidence": 0.45},
-        {"zoneId": "rk-puram", "aqi": 198, "dominantSource": "traffic", "confidence": 0.65},
-        {"zoneId": "ito", "aqi": 185, "dominantSource": "traffic", "confidence": 0.48},
-        {"zoneId": "dwarka", "aqi": 172, "dominantSource": "construction", "confidence": 0.38},
-        {"zoneId": "lodhi-road", "aqi": 145, "dominantSource": "traffic", "confidence": 0.42},
-    ]
-
     priorities = []
-    for i, zone in enumerate(zone_stubs):
-        pop = ZONE_POPULATION.get(zone["zoneId"], 10000)
-        score = compute_zone_score(zone["aqi"], pop, zone["confidence"])
-        reason = build_reason_text(zone["zoneId"], zone["aqi"], pop, zone["dominantSource"], zone["confidence"])
+    
+    for i, zone_id in enumerate(VALID_ZONES):
+        try:
+            attr = get_attribution(zone_id)
+            aqi = attr["currentAQI"]
+            dominant = attr["dominantSource"]
+            confidence = next((s["confidence"] for s in attr["sources"] if s["category"] == dominant), 0.5)
+        except Exception as e:
+            aqi = 200
+            dominant = "unknown"
+            confidence = 0.5
+        
+        pop = ZONE_POPULATION.get(zone_id, 10000)
+        score = compute_zone_score(aqi, pop, confidence)
+        reason = build_reason_text(zone_id, aqi,pop, dominant, confidence)
+
         priorities.append({
-            "zoneId": zone["zoneId"],
-            "name": zone["zoneId"].replace("-", " ").title(),
+            "zoneId": zone_id,
+            "name": zone_id.replace("-", " ").title(),
             "score": score,
-            "rank": i + 1,
+            "rank": 0,
             "reason": reason,
             "evidence": {
-                "aqi": zone["aqi"],
-                "aqiCategory": aqi_to_category(zone["aqi"]),
+                "aqi": aqi,
+                "aqiCategory": aqi_to_category(aqi),
                 "population": pop,
-                "dominantSource": zone["dominantSource"],
-                "attributionConfidence": zone["confidence"],
+                "dominantSource": dominant,
+                "attributionConfidence": confidence
             },
         })
-
-    # Sort by score descending and re-rank
-    priorities.sort(key=lambda x: x["score"], reverse=True)
+    
+    priorities.sort(key=lambda f: f["score"], reverse=True)
     for i, p in enumerate(priorities):
         p["rank"] = i + 1
 
     return {
         "generatedAt": now.isoformat(),
         "priorities": priorities[:limit],
-        "totalZonesEvaluated": len(zone_stubs),
-        "dataSource": "stub-model",
+        "totalZonesEvaluated": len(VALID_ZONES),
+        "dataSource": "real-model",
     }
 
 
