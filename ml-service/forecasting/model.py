@@ -21,6 +21,28 @@ import hashlib
 
 warnings.filterwarnings('ignore')
 
+
+def pm25_to_aqi(pm25: float) -> int:
+    """
+    Convert PM2.5 concentration (µg/m³) to US AQI using EPA piecewise-linear
+    breakpoints. Replaces the rough `pm25 * 3.5` approximation.
+    Reference: https://www.airnow.gov/aqi/aqi-calculator-concentration/
+    """
+    breakpoints = [
+        (0.0,   12.0,   0,   50),
+        (12.1,  35.4,  51,  100),
+        (35.5,  55.4, 101,  150),
+        (55.5, 150.4, 151,  200),
+        (150.5, 250.4, 201, 300),
+        (250.5, 350.4, 301, 400),
+        (350.5, 500.4, 401, 500),
+    ]
+    pm25 = max(0.0, round(pm25, 1))
+    for c_lo, c_hi, i_lo, i_hi in breakpoints:
+        if c_lo <= pm25 <= c_hi:
+            return round((i_hi - i_lo) / (c_hi - c_lo) * (pm25 - c_lo) + i_lo)
+    return 500 if pm25 > 500.4 else 0
+
 DATA_PATH = Path(__file__).parent.parent / "data"
 ZONES_CSV = DATA_PATH / "zones_metadata.csv"
 CPCB_CSV = DATA_PATH / "cpcb_samples.csv"
@@ -54,7 +76,7 @@ def get_forecast(ward_id: str) -> dict[str, Any]:
             df["time"] = pd.to_datetime(df["time"])
             df.set_index("time", inplace=True)
             df.sort_index(inplace=True)
-            df["aqi"] = df["pm25"]*3.5
+            df["aqi"] = df["pm25"].apply(pm25_to_aqi).astype(float)
 
             df_6h = df["aqi"].resample("6h").mean().ffill()
             train = df_6h.values

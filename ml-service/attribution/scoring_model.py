@@ -18,6 +18,27 @@ from typing import Any
 import pandas as pd
 from pathlib import Path
 
+
+def pm25_to_aqi(pm25: float) -> int:
+    """
+    Convert PM2.5 (µg/m³) to US AQI using EPA piecewise-linear breakpoints.
+    Consistent with forecasting/model.py — do NOT use pm25 * 3.5.
+    """
+    breakpoints = [
+        (0.0,   12.0,   0,   50),
+        (12.1,  35.4,  51,  100),
+        (35.5,  55.4, 101,  150),
+        (55.5, 150.4, 151,  200),
+        (150.5, 250.4, 201, 300),
+        (250.5, 350.4, 301, 400),
+        (350.5, 500.4, 401, 500),
+    ]
+    pm25 = max(0.0, round(float(pm25), 1))
+    for c_lo, c_hi, i_lo, i_hi in breakpoints:
+        if c_lo <= pm25 <= c_hi:
+            return round((i_hi - i_lo) / (c_hi - c_lo) * (pm25 - c_lo) + i_lo)
+    return 500 if pm25 > 500.4 else 0
+
 DATA_PATH = Path(__file__).parent.parent / "data"
 ZONES_CSV = DATA_PATH / "zones_metadata.csv"
 CPCB_CSV = DATA_PATH / "cpcb_samples.csv"
@@ -82,7 +103,7 @@ def get_attribution(zone_id: str, pollutant_readings: dict = None, zone_meta: di
                 "no2": max(5, float(latest["no2"]) + zone_offset * 0.1),
                 "so2": max(5, float(latest["so2"]) + zone_offset * 0.05),
                 "co": max(0.1, float(latest["co"])),
-                "aqi": int(max(50, (float(latest["pm25"]) + zone_offset * 0.3) * 3.5)),
+                "aqi": pm25_to_aqi(max(0, float(latest["pm25"]) + zone_offset * 0.3)),
             }
         except Exception as e:
             import hashlib
@@ -94,7 +115,7 @@ def get_attribution(zone_id: str, pollutant_readings: dict = None, zone_meta: di
                 "no2": 65.0,
                 "so2": 38.0,
                 "co": 1.8,
-                "aqi": int(290 + zone_offset)
+                "aqi": pm25_to_aqi(max(0, 145.0 + zone_offset * 0.3)),
             }
         
     if zone_meta is None:
