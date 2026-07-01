@@ -51,6 +51,7 @@ app.add_middleware(
 VALID_ZONES = [
     "anand-vihar", "rk-puram", "ito", "dwarka", "rohini",
     "punjabi-bagh", "okhla", "narela", "lodhi-road", "wazirpur",
+    "mandir-marg"
 ]
 
 

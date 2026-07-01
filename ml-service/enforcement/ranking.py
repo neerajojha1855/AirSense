@@ -95,7 +95,12 @@ def get_enforcement_priorities(limit: int = 10) -> dict[str, Any]:
     for i, zone_id in enumerate(VALID_ZONES):
         try:
             attr = get_attribution(zone_id)
-            aqi = attr["currentAQI"]
+            try:
+                from forecasting.model import get_forecast
+                forecast_res = get_forecast(zone_id)
+                aqi = forecast_res["forecast"][0]["predictedAQI"]
+            except Exception:
+                aqi = attr["currentAQI"]
             dominant = attr["dominantSource"]
             confidence = next((s["confidence"] for s in attr["sources"] if s["category"] == dominant), 0.5)
         except Exception as e:

@@ -39,7 +39,7 @@ Scripts/
 *.ipynb
 
 # ML model artifacts (large binary files — store in cloud/DVC, not git)
-ml-service/models/*.pkl
+# ml-service/models/*.pkl
 ml-service/models/*.joblib
 ml-service/models/*.h5
 ml-service/models/*.pt

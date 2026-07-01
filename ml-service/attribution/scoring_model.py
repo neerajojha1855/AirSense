@@ -68,9 +68,18 @@ def get_attribution(zone_id: str, pollutant_readings: dict = None, zone_meta: di
     if pollutant_readings is None:
         try:
             df_cpcb = pd.read_csv(CPCB_CSV, skiprows=6)
-            df_cpcb.columns = ["time", "pm10", "pm25", "no2", "so2", "co"]
-            df_cpcb.ffill(inplace=True) # Fill NaNs with last valid observation
-            latest = df_cpcb.iloc[-1]
+            df_cpcb.columns = ["time", "pm10", "pm25", "no2", "so2", "co", "dust", "uv_index"]
+            df_cpcb["time"] = pd.to_datetime(df_cpcb["time"])
+
+            # Filter for current month to match seasonal forecast
+            current_month = now.month
+            df_month = df_cpcb[df_cpcb["time"].dt.month == current_month]
+
+            # Use the month's avg. If missing, fall back to yearly avg.
+            if not df_month.empty:
+                latest = df_month.mean(numeric_only=True)
+            else:
+                latest = df_cpcb.mean(numeric_only=True)
             
             import hashlib
             h_val = int(hashlib.md5(zone_id.encode()).hexdigest()[:4], 16)
@@ -89,12 +98,12 @@ def get_attribution(zone_id: str, pollutant_readings: dict = None, zone_meta: di
             h_val = int(hashlib.md5(zone_id.encode()).hexdigest()[:4], 16)
             zone_offset = (h_val % 30) - 15
             pollutant_readings = {
-                "pm25": 145.0 + zone_offset * 0.3,
-                "pm10": 280.0 + zone_offset * 0.6,
-                "no2": 65.0,
-                "so2": 38.0,
-                "co": 1.8,
-                "aqi": int(290 + zone_offset)
+                "pm25": 60.0 + zone_offset * 0.3,
+                "pm10": 110.0 + zone_offset * 0.6,
+                "no2": 35.0,
+                "so2": 15.0,
+                "co": 0.8,
+                "aqi": int(150 + zone_offset)
             }
         
     if zone_meta is None:
