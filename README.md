@@ -226,9 +226,9 @@ LLM-generated, location-aware advisory text in Hindi + English (web chat widget)
 
 | Name | Role |
 |---|---|
-| TBD | ML Engineer — Forecasting + Attribution models |
-| TBD | Backend Engineer — Data pipeline, APIs, DB |
-| TBD | Frontend Engineer — Dashboard, UI, demo assets |
+| Mridul Malvi | ML Engineer — Forecasting + Attribution models |
+| Piyush Kumar | Backend Engineer — Data pipeline, APIs, DB |
+| Neeraj Ojha  | Frontend Engineer — Dashboard, UI, demo assets |
 
 ---
 
